@@ -207,13 +207,33 @@ void f_move(void *arg) {
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
         if (robotStarted) {
             rt_mutex_acquire(&mutex_move, TM_INFINITE);
-            send_command_to_robot(move);
+            int err = send_command_to_robot(move);
             rt_mutex_release(&mutex_move);
+            
+            if (err == ROBOT_NOK) { 
+                rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
+                compteur_com_robot = compteur_com_robot +1;
+                if (compteur_com_robot == 3) {
+                    MessageToMon msg;
+                    set_msgToMon_header(&msg, HEADER_STM_LOST_DMB);
+                    write_in_queue(&q_messageToMon, msg);
+                    close_communication_robot();
+                    //gérer le reset
+                    break;
+                }
+                rt_mutex_release(&mutex_compteur_com_robot);
+            } 
+            else {
+               rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
+               compteur_com_robot = 0; 
+               rt_mutex_release(&mutex_compteur_com_robot);
+            }            
+        }
+        rt_mutex_release(&mutex_robotStarted);
 #ifdef _WITH_TRACE_
             printf("%s: the movement %c was sent\n", info.name, move);
 #endif            
-        }
-        rt_mutex_release(&mutex_robotStarted);
+        
     }
 }
 
@@ -243,7 +263,7 @@ void f_battery(void *arg){
                 rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
                 compteur_com_robot = compteur_com_robot +1;
                 if (compteur_com_robot == 3) {
-                    send_message_to_monitor(HEADER_STM_LOST_DMB);
+                    f_sendToMon(HEADER_STM_LOST_DMB);
                     close_communication_robot();
                     //gérer le reset
                 }
@@ -254,7 +274,7 @@ void f_battery(void *arg){
                rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
                compteur_com_robot = 0; 
                rt_mutex_release(&mutex_compteur_com_robot);
-               send_message_to_monitor(HEADER_STM_BAT, rep+48);
+               f_sendToMon(HEADER_STM_BAT, rep+48);
             }
         }
         rt_mutex_release(&mutex_robotStarted);
