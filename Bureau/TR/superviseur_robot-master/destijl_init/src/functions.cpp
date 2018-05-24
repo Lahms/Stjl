@@ -175,10 +175,25 @@ void f_startRobot(void * arg) {
             MessageToMon msg;
             set_msgToMon_header(&msg, HEADER_STM_ACK);
             write_in_queue(&q_messageToMon, msg);
+            rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
+            compteur_com_robot = 0;
+            rt_mutex_release(&mutex_compteur_com_robot);
         } else {
+            rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
+            compteur_com_robot = compteur_com_robot +1;
             MessageToMon msg;
             set_msgToMon_header(&msg, HEADER_STM_NO_ACK);
             write_in_queue(&q_messageToMon, msg);
+            if (compteur_com_robot == 3) {
+                MessageToMon msg;
+                set_msgToMon_header(&msg, HEADER_STM_LOST_DMB);
+                write_in_queue(&q_messageToMon, msg);
+                close_communication_robot();
+                rt_mutex_release(&mutex_compteur_com_robot);
+                //gérer le reset
+                break;
+            }
+            rt_mutex_release(&mutex_compteur_com_robot);   
         }
     }
 }
@@ -218,6 +233,7 @@ void f_move(void *arg) {
                     set_msgToMon_header(&msg, HEADER_STM_LOST_DMB);
                     write_in_queue(&q_messageToMon, msg);
                     close_communication_robot();
+                    rt_mutex_release(&mutex_compteur_com_robot);
                     //gérer le reset
                     break;
                 }
