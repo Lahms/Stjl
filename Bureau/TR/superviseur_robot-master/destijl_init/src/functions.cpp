@@ -54,7 +54,9 @@ void f_sendToMon(void * arg) {
             free_msgToMon_data(&msg);
             rt_queue_free(&q_messageToMon, &msg);
         } else {
-            printf("Error msg queue write: %s\n", strerror(-err));
+            printf("Error msg queue write: %s\n";
+            //perte_com_monitor
+            break;
         }
     }
 }
