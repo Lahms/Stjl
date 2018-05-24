@@ -243,7 +243,7 @@ void f_battery(void *arg){
                 rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
                 compteur_com_robot = compteur_com_robot +1;
                 if (compteur_com_robot == 3) {
-                    f_sendToMon(HEADER_STM_LOST_DMB);
+                    send_message_to_monitor(HEADER_STM_LOST_DMB);
                     close_communication_robot();
                     //gérer le reset
                 }
@@ -254,7 +254,7 @@ void f_battery(void *arg){
                rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
                compteur_com_robot = 0; 
                rt_mutex_release(&mutex_compteur_com_robot);
-               f_sendToMon(HEADER_STM_BAT, rep+48);
+               send_message_to_monitor(HEADER_STM_BAT, rep+48);
             }
         }
         rt_mutex_release(&mutex_robotStarted);
