@@ -54,7 +54,7 @@ void f_sendToMon(void * arg) {
             free_msgToMon_data(&msg);
             rt_queue_free(&q_messageToMon, &msg);
         } else {
-            printf("Error msg queue write: %s\n";
+            printf("Error msg queue write\n");
             //perte_com_monitor
             break;
         }
@@ -80,41 +80,69 @@ void f_receiveFromMon(void *arg) {
         printf("%s : waiting for a message from monitor\n", info.name);
 #endif
         err = receive_message_from_monitor(msg.header, msg.data);
+        
+        if (err > 0 ) {
 #ifdef _WITH_TRACE_
         printf("%s: msg {header:%s,data=%s} received from UI\n", info.name, msg.header, msg.data);
 #endif
-        if (strcmp(msg.header, HEADER_MTS_COM_DMB) == 0) {
-            if (msg.data[0] == OPEN_COM_DMB) { // Open communication supervisor-robot
-#ifdef _WITH_TRACE_
-                printf("%s: message open Xbee communication\n", info.name);
-#endif
-                rt_sem_v(&sem_openComRobot);
+            if (strcmp(msg.header, HEADER_MTS_COM_DMB) == 0) {
+                if (msg.data[0] == OPEN_COM_DMB) { // Open communication supervisor-robot
+    #ifdef _WITH_TRACE_
+                    printf("%s: message open Xbee communication\n", info.name);
+    #endif
+                    rt_sem_v(&sem_openComRobot);
+                }
+                else {
+                    rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+                    robotStarted = 1;
+                    rt_mutex_release(&mutex_robotStarted);
+                }
+                    
+                }
+            else if (strcmp(msg.header, HEADER_MTS_CAMERA) == 0) {
+                switch (msg.data[0]) {
+                    case CAM_OPEN :
+                        break;
+                    case CAM_CLOSE :
+                        break;
+                    case CAM_ASK_ARENA :
+                        break;
+                    case CAM_ARENA_CONFIRM :
+                        break;
+                    case CAM_ARENA_INFIRM :
+                        break;
+                    case CAM_COMPUTE_POSITION :
+                        break;
+                    case CAM_STOP_COMPUTE_POSITION :
+                        break;
+                }
             }
-        } else if (strcmp(msg.header, HEADER_MTS_DMB_ORDER) == 0) {
-            if (msg.data[0] == DMB_START_WITHOUT_WD) { // Start robot
-#ifdef _WITH_TRACE_
-                printf("%s: message start robot\n", info.name);
-#endif 
-                rt_sem_v(&sem_startRobot);
+            else if (strcmp(msg.header, HEADER_MTS_DMB_ORDER) == 0) {
+                if (msg.data[0] == DMB_START_WITHOUT_WD) { // Start robot
+    #ifdef _WITH_TRACE_
+                    printf("%s: message start robot\n", info.name);
+    #endif 
+                    rt_sem_v(&sem_startRobot);
 
-            } else if ((msg.data[0] == DMB_GO_BACK)
-                    || (msg.data[0] == DMB_GO_FORWARD)
-                    || (msg.data[0] == DMB_GO_LEFT)
-                    || (msg.data[0] == DMB_GO_RIGHT)
-                    || (msg.data[0] == DMB_STOP_MOVE)) {
+                } else if ((msg.data[0] == DMB_GO_BACK)
+                        || (msg.data[0] == DMB_GO_FORWARD)
+                        || (msg.data[0] == DMB_GO_LEFT)
+                        || (msg.data[0] == DMB_GO_RIGHT)
+                        || (msg.data[0] == DMB_STOP_MOVE)) {
 
-                rt_mutex_acquire(&mutex_move, TM_INFINITE);
-                move = msg.data[0];
-                rt_mutex_release(&mutex_move);
-#ifdef _WITH_TRACE_
-                printf("%s: message update movement with %c\n", info.name, move);
-#endif
+                    rt_mutex_acquire(&mutex_move, TM_INFINITE);
+                    move = msg.data[0];
+                    rt_mutex_release(&mutex_move);
+    #ifdef _WITH_TRACE_
+                    printf("%s: message update movement with %c\n", info.name, move);
+    #endif
 
+                }
             }
         }
-    } while (err > 0);
+        } while (err > 0);
+    }
 
-}
 
 void f_openComRobot(void * arg) {
     int err;
@@ -174,8 +202,10 @@ void f_startRobot(void * arg) {
             rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
             robotStarted = 1;
             rt_mutex_release(&mutex_robotStarted);
+            printf("send Ack\n");
             MessageToMon msg;
             set_msgToMon_header(&msg, HEADER_STM_ACK);
+            
             write_in_queue(&q_messageToMon, msg);
             rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
             compteur_com_robot = 0;
@@ -214,20 +244,22 @@ void f_move(void *arg) {
     rt_task_set_periodic(NULL, TM_NOW, 100000000);
     while (1) {
 #ifdef _WITH_TRACE_
-        printf("%s: Wait period \n", info.name);
+        //printf("%s: Wait period \n", info.name);
 #endif
         rt_task_wait_period(NULL);
 #ifdef _WITH_TRACE_
-        printf("%s: Periodic activation\n", info.name);
-        printf("%s: move equals %c\n", info.name, move);
+        //printf("%s: Periodic activation\n", info.name);
+        //printf("%s: move equals %c\n", info.name, move);
 #endif
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
-        if (robotStarted) {
+        int start = robotStarted;
+        rt_mutex_release(&mutex_robotStarted);
+        if (start) {
             rt_mutex_acquire(&mutex_move, TM_INFINITE);
             int err = send_command_to_robot(move);
             rt_mutex_release(&mutex_move);
             
-            if (err == ROBOT_NOK) { 
+            if (err < 0) { 
                 rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
                 compteur_com_robot = compteur_com_robot +1;
                 if (compteur_com_robot == 3) {
@@ -247,9 +279,8 @@ void f_move(void *arg) {
                rt_mutex_release(&mutex_compteur_com_robot);
             }            
         }
-        rt_mutex_release(&mutex_robotStarted);
 #ifdef _WITH_TRACE_
-            printf("%s: the movement %c was sent\n", info.name, move);
+            //printf("%s: the movement %c was sent\n", info.name, move);
 #endif            
         
     }
@@ -270,20 +301,36 @@ void f_battery(void *arg){
 
     /* PERIODIC START */
     rt_task_set_periodic(NULL, TM_NOW, 500000000); 
-    while (1) {
+    do {
+        rt_mutex_acquire(&mutex_reset,TM_INFINITE);
+        rst = reset;
+        rt_mutex_release(&mutex_reset);
+        if (rst) {
+            break;
+        }
         rt_task_wait_period(NULL);
         
         rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
         
         if (robotStarted) {
             int rep = send_command_to_robot(DMB_GET_VBAT);
-            if (rep == ROBOT_ERROR) { 
+            if (rep < 0) { 
                 rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
                 compteur_com_robot = compteur_com_robot +1;
                 if (compteur_com_robot == 3) {
-                    f_sendToMon(HEADER_STM_LOST_DMB);
+                     MessageToMon msg;
+                    set_msgToMon_header(&msg,HEADER_STM_LOST_DMB);
+                    write_in_queue(&q_messageToMon, msg);
                     close_communication_robot();
+                    
+                    rt_mutex_acquire(&mutex_robotStarted, TM_INFINITE);
+                    robotStarted=0;
+                    rt_mutex_release(&mutex_robotStarted);
+                    rt_mutex_acquire(&mutex_reset,TM_INFINITE);
+                    reset=1;
+                    rt_mutex_release(&mutex_reset);
                     //gérer le reset
+                    break;
                 }
                 rt_mutex_release(&mutex_compteur_com_robot);
              
@@ -291,14 +338,18 @@ void f_battery(void *arg){
             else {
                rt_mutex_acquire(&mutex_compteur_com_robot, TM_INFINITE);
                compteur_com_robot = 0; 
+               rep += 48;
                rt_mutex_release(&mutex_compteur_com_robot);
-               f_sendToMon(HEADER_STM_BAT, rep+48);
+                MessageToMon msg;
+               set_msgToMon_header(&msg,HEADER_STM_BAT);
+               set_msgToMon_data(&msg,&rep);
+               write_in_queue(&q_messageToMon, msg);
             }
         }
         rt_mutex_release(&mutex_robotStarted);
-    }
+    } while (rst = 0);
 }
 
-void f_vision(void *arg){
+/*void f_vision(void *arg){
     
-}
+}*/
