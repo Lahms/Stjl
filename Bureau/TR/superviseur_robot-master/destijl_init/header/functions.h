@@ -11,6 +11,8 @@
  * Created on 15 janvier 2018, 12:50
  */
 
+
+
 #ifndef FUNCTIONS_H
 #define FUNCTIONS_H
 
@@ -48,6 +50,7 @@ extern RT_SEM sem_openComRobot;
 extern RT_SEM sem_serverOk;
 extern RT_SEM sem_startRobot;
 
+
 extern RT_QUEUE q_messageToMon;
 
 extern int etatCommMoniteur;
@@ -78,4 +81,3 @@ void f_vision(void *arg);
 
 
 #endif /* FUNCTIONS_H */
-
